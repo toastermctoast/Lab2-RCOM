@@ -77,7 +77,7 @@ int main(int argc, char** argv)
 
     for (i = 0; i < 255; i++) {     //reads 
         buf[i] = getchar();
-        if (buf[i] == "\n") break;
+        if (buf[i] == '\0') break;
     }
 
     printf("STRING: %s",buf);
