@@ -82,13 +82,11 @@ int main(int argc, char** argv)
 
     printf("STRING: %s",buf);
 
-    /*testing
+    //testing
     buf[25] = '\n';
 
     res = write(fd,buf,255);            //returns number of written bytes in the driver file and saves in res
     printf("%d bytes written\n", res);
-
-    */
 
     if ( tcsetattr(fd,TCSANOW,&oldtio) == -1) {     //set attributes again
         perror("tcsetattr");
