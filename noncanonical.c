@@ -69,6 +69,8 @@ int main(int argc, char** argv)
     }
 
     printf("New termios structure set\n");
+
+     /*RECEIVING STRING*/
     int i;
     for(i=0; i<255;i++){
         read(fd,buf+i,1); //reads chars one by one
@@ -77,6 +79,10 @@ int main(int argc, char** argv)
 
     buf[i+1] = 0; //so we can printf
     printf("STRING: %s\n",buf);
+
+    /*SENDING IT BACK*/
+    res = write(fd,buf,i+1);            //returns number of written bytes in the driver file and saves in res
+    printf("%d bytes written\n", res);
 
     tcsetattr(fd,TCSANOW,&oldtio);
     close(fd);

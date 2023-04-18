@@ -74,16 +74,26 @@ int main(int argc, char** argv)
 
     printf("New termios structure set\n");
 
-
+    /*SENDING STRING*/
     for (i = 0; i < 255; i++) {     //reads 
         buf[i] = getchar();
         if (buf[i] == '\n' || buf[i] == '\0') break;
     }
 
-    printf("STRING: %s",buf);
-
+    printf("STRING SENT: %s",buf);
     res = write(fd,buf,i+1);            //returns number of written bytes in the driver file and saves in res
     printf("%d bytes written\n", res);
+
+
+    /*RECEIVING IT BACK*/
+    int i;
+    for(i=0; i<255;i++){
+        read(fd,buf+i,1); //reads chars one by one
+        if (buf[i] == 'z') break;
+    }
+
+    buf[i+1] = 0; //so we can printf
+    printf("STRING RECEIVED: %s\n",buf);
 
     if ( tcsetattr(fd,TCSANOW,&oldtio) == -1) {     //set attributes again
         perror("tcsetattr");
