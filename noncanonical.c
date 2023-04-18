@@ -18,7 +18,7 @@ volatile int STOP=FALSE;
 
 int main(int argc, char** argv)
 {
-    int fd,c, res;
+    int fd,c, res, i;
     struct termios oldtio,newtio;
     char buf[255];
 
@@ -71,7 +71,6 @@ int main(int argc, char** argv)
     printf("New termios structure set\n");
 
      /*RECEIVING STRING*/
-    int i;
     for(i=0; i<255;i++){
         read(fd,buf+i,1); //reads chars one by one
         if (buf[i] == 'z') break;

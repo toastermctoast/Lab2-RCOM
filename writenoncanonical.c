@@ -55,7 +55,7 @@ int main(int argc, char** argv)
     newtio.c_lflag = 0;
 
     newtio.c_cc[VTIME]    = 0;   /* inter-character timer unused */
-    newtio.c_cc[VMIN]     = 5;   /* blocking read until 5 chars received */
+    newtio.c_cc[VMIN]     = 1;   /* blocking read until 5 chars received */
 
 
 
@@ -86,7 +86,6 @@ int main(int argc, char** argv)
 
 
     /*RECEIVING IT BACK*/
-    int i;
     for(i=0; i<255;i++){
         read(fd,buf+i,1); //reads chars one by one
         if (buf[i] == 'z') break;
