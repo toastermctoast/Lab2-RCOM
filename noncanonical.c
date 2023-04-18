@@ -5,8 +5,11 @@
 #include <fcntl.h>
 #include <termios.h>
 #include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
 
-#define BAUDRATE B38400
+#define BAUDRATE B9600
 #define _POSIX_SOURCE 1 /* POSIX compliant source */
 #define FALSE 0
 #define TRUE 1
@@ -50,7 +53,7 @@ int main(int argc, char** argv)
     newtio.c_lflag = 0;
 
     newtio.c_cc[VTIME]    = 0;   /* inter-character timer unused */
-    newtio.c_cc[VMIN]     = 5;   /* blocking read until 5 chars received */
+    newtio.c_cc[VMIN]     = 1;   /* blocking read until 1 chars received */
 
     /*
     VTIME e VMIN devem ser alterados de forma a proteger com um temporizador a
@@ -66,19 +69,14 @@ int main(int argc, char** argv)
     }
 
     printf("New termios structure set\n");
-
-    while (STOP==FALSE) {       /* loop for input */
-        res = read(fd,buf,255);   /* returns after 5 chars have been input */
-        buf[res]=0;               /* so we can printf... */
-        printf(":%s:%d\n", buf, res);
-        if (buf[0]=='z') STOP=TRUE;
+    int i;
+    for(i=0; i<255;i++){
+        read(fd,buf+i,1); //reads chars one by one
+        if (buf[i] == 'z') break;
     }
 
-
-
-    /*
-    O ciclo WHILE deve ser alterado de modo a respeitar o indicado no guião
-    */
+    buf[i+1] = 0; //so we can printf
+    printf("STRING: %s\n",buf);
 
     tcsetattr(fd,TCSANOW,&oldtio);
     close(fd);
