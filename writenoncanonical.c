@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#define BAUDRATE B38400
+#define BAUDRATE B9600
 #define MODEMDEVICE "/dev/ttyS1"
 #define _POSIX_SOURCE 1 /* POSIX compliant source */
 #define FALSE 0
@@ -77,15 +77,12 @@ int main(int argc, char** argv)
 
     for (i = 0; i < 255; i++) {     //reads 
         buf[i] = getchar();
-        if (buf[i] == '\0') break;
+        if (buf[i] == '\n' || buf[i] == '\0') break;
     }
 
     printf("STRING: %s",buf);
 
-    //testing
-    buf[25] = '\n';
-
-    res = write(fd,buf,255);            //returns number of written bytes in the driver file and saves in res
+    res = write(fd,buf,i+1);            //returns number of written bytes in the driver file and saves in res
     printf("%d bytes written\n", res);
 
     if ( tcsetattr(fd,TCSANOW,&oldtio) == -1) {     //set attributes again
