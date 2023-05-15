@@ -25,7 +25,9 @@
 
 #define FRAME_SIZE 5
 
-volatile int STOP=FALSE;
+#define TIME_OUT 5
+
+int timed_out = 0, timer_on = 0;
 
 int send_command(int fd, unsigned int* command){
 
@@ -37,6 +39,8 @@ int send_command(int fd, unsigned int* command){
     if (res == 5) return 1;
 
 }
+
+void flag_time_out(){ timed_out=1; }
 
 int read_answer(int fd, unsigned int* answer, unsigned int* recv){
 
@@ -57,8 +61,16 @@ int read_answer(int fd, unsigned int* answer, unsigned int* recv){
 
     statesSET state;
     int i;
-
+    
     for(i=0; i<FRAME_SIZE;i++){
+
+        if (!timer_on) {
+            alarm(3);  // activa alarme de 3s
+            timer_on=1;
+        }
+
+        if (timed_out) break;
+
         read(fd,recv+i,1); //reads chars one by one
 
         printf("BYTE LIDO %d\n", recv[i]);
@@ -118,7 +130,7 @@ int main(int argc, char** argv){
     int fd,c;
     struct termios oldtio,newtio;
     int i, sum = 0, speed = 0;
-
+if(TRUE){
     if ( (argc < 2) || ((strcmp("/dev/ttyS0", argv[1])!=0) &&  (strcmp("/dev/ttyS1", argv[1])!=0) )) {
         printf("Usage:\tnserial SerialPort\n\tex: nserial /dev/ttyS1\n");
         exit(1);
@@ -165,6 +177,15 @@ int main(int argc, char** argv){
 
     printf("New termios structure set\n");
 
+
+}
+
+    /*-----------------------------------------------*/
+    /*-------------------TRABALHO--------------------*/
+    /*-----------------------------------------------*/
+
+
+
     //SEND SET COMMAND
     unsigned int set[FRAME_SIZE] =  {FLAG, A, C_SET, BCC_SET, FLAG};
     if (send_command(fd,set) != 1) printf("ERROR SENDING %s COMMAND\n",set);
@@ -172,7 +193,23 @@ int main(int argc, char** argv){
     //RECEIVE UA ANSWER
     unsigned int ua[FRAME_SIZE] = {FLAG, A, C_UA, BCC_UA, FLAG};
     unsigned recv[FRAME_SIZE];
-    read_answer(fd,ua,recv);
+
+    (void) signal(SIGALRM, flag_time_out);  //flag_time_out é chamado quando acaba o tempo
+    
+    while(read_answer(fd,ua,recv) != 1){
+
+        if (timed_out){
+            send_command(fd,set);
+            printf("Retransmitting command...\n");
+        }
+        else {
+            printf("Unknown error reading answer\n");
+            return -1;
+        }
+    }
+
+    printf("Correct answer received.\n");
+    
 
     if ( tcsetattr(fd,TCSANOW,&oldtio) == -1) {     //set attributes again
         perror("tcsetattr");
