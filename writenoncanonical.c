@@ -65,7 +65,7 @@ int read_answer(int fd, unsigned int* answer, unsigned int* recv){
     for(i=0; i<FRAME_SIZE;i++){
 
         if (!timer_on) {
-            alarm(3);  // activa alarme de 3s
+            alarm(TIME_OUT);  // ativa alarme de TIME_OUT segundos
             timer_on=1;
         }
 
@@ -130,6 +130,7 @@ int main(int argc, char** argv){
     int fd,c;
     struct termios oldtio,newtio;
     int i, sum = 0, speed = 0;
+
 if(TRUE){
     if ( (argc < 2) || ((strcmp("/dev/ttyS0", argv[1])!=0) &&  (strcmp("/dev/ttyS1", argv[1])!=0) )) {
         printf("Usage:\tnserial SerialPort\n\tex: nserial /dev/ttyS1\n");
