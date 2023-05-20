@@ -10,7 +10,7 @@
 #include <unistd.h>
 #include <signal.h>
 
-#define BAUDRATE B9600
+#define BAUDRATE B38400
 #define MODEMDEVICE "/dev/ttyS1"
 #define _POSIX_SOURCE 1 /* POSIX compliant source */
 #define FALSE 0
@@ -24,10 +24,12 @@
 #define BCC_SET (A^C_SET)
 
 #define FRAME_SIZE 5
+#define TIME_OUT 5
+
+
 
 volatile int STOP=FALSE;
-
-int send_command(int fd, unsigned int* command){
+int send_command(int fd, char* command){
 
     int res;
 
@@ -38,12 +40,12 @@ int send_command(int fd, unsigned int* command){
 
 }
 
-int read_answer(int fd, unsigned int* answer, unsigned int* recv){
+int read_answer(int fd, char* answer, char* recv){
 
-    int FLAG_ANSWER = answer[0];
-    int A_ANSWER = answer[1];
-    int C_ANSWER = answer[2];
-    int BCC_ANSWER = answer[3];
+    char FLAG_ANSWER = answer[0];
+    char A_ANSWER = answer[1];
+    char C_ANSWER = answer[2];
+    char BCC_ANSWER = answer[3];
 
     //Estados
     typedef enum {
@@ -55,43 +57,40 @@ int read_answer(int fd, unsigned int* answer, unsigned int* recv){
         STOP
     } statesSET;
 
-    statesSET state;
+    statesSET state = START;
     int i;
 
     for(i=0; i<FRAME_SIZE;i++){
         read(fd,recv+i,1); //reads chars one by one
-
-        printf("BYTE LIDO %d\n", recv[i]);
+        //printf("\nBYTE LIDO: %x     ANSWER[i] : %x\n", recv[i],answer[i]);
 
         switch(state){
 
 		    case START:
 		        printf("start\n");
-		        if(recv[i]==FLAG_ANSWER){
-			        state=FLAG_RCV;
-		        }
+		        if(recv[i]==FLAG_ANSWER) state=FLAG_RCV;
 		        else state=START; 
 		    break;
 		   
             case FLAG_RCV:
 		        printf("flag_rcv\n");
-		        if(recv[i]==A_ANSWER) state = A_RCV;
-		        if (recv[i] == FLAG_ANSWER) state = FLAG_RCV;
-                else state = START;
+		        if(recv[i]==A_ANSWER){ state = A_RCV; break;}
+		        if (recv[i] == FLAG_ANSWER){ state = FLAG_RCV; break;}
+                state = START;
 		    break;
 
             case A_RCV:
 		        printf("a_rcv\n");
-                if(recv[i]==C_ANSWER) state = C_RCV;
-		        if(recv[i] == FLAG_ANSWER) state = FLAG_RCV;
-                else state = START;
+                if(recv[i]==C_ANSWER){ state = C_RCV; break;}
+		        if(recv[i] == FLAG_ANSWER){ state = FLAG_RCV; break;}
+                state = START;
 		    break;
 
             case C_RCV:
 		        printf("c_rcv\n");
-                if(recv[i]==BCC_ANSWER) state = BCC_OK;
-		        if(recv[i] == FLAG_ANSWER) state = FLAG_RCV;
-                else state = START;
+                if(recv[i]==BCC_ANSWER){ state = BCC_OK; break;}
+		        if(recv[i] == FLAG_ANSWER){ state = FLAG_RCV; break;}
+                state = START;
 		    break;
 
             case BCC_OK:
@@ -99,19 +98,12 @@ int read_answer(int fd, unsigned int* answer, unsigned int* recv){
                 if(recv[i] == FLAG_ANSWER) state = STOP;
                 else state = START;
 		    break;
-
-            case STOP:
-		        printf("stop\n");
-		    break;
-
 		   
         }
-        if (state==STOP) break;
+        if (state==STOP) return 1;
     }
-    recv[i+1] = 0; //so we can printf
-    printf("COMMAND RECEIVED: %s\n",recv);
 
-    return 1;
+    return -1;
 }
 
 int main(int argc, char** argv){
@@ -119,7 +111,7 @@ int main(int argc, char** argv){
     struct termios oldtio,newtio;
     int i, sum = 0, speed = 0;
 
-    if ( (argc < 2) || ((strcmp("/dev/ttyS0", argv[1])!=0) &&  (strcmp("/dev/ttyS1", argv[1])!=0) )) {
+    if ( (argc < 2) || ((strcmp("/dev/ttyS10", argv[1])!=0) &&  (strcmp("/dev/ttyS11", argv[1])!=0) )) {
         printf("Usage:\tnserial SerialPort\n\tex: nserial /dev/ttyS1\n");
         exit(1);
     }
@@ -166,13 +158,14 @@ int main(int argc, char** argv){
     printf("New termios structure set\n");
 
     //SEND SET COMMAND
-    unsigned int set[FRAME_SIZE] =  {FLAG, A, C_SET, BCC_SET, FLAG};
+    char set[FRAME_SIZE] =  {FLAG, A, C_SET, BCC_SET, FLAG};
     if (send_command(fd,set) != 1) printf("ERROR SENDING %s COMMAND\n",set);
 
     //RECEIVE UA ANSWER
-    unsigned int ua[FRAME_SIZE] = {FLAG, A, C_UA, BCC_UA, FLAG};
-    unsigned recv[FRAME_SIZE];
-    read_answer(fd,ua,recv);
+    char ua[FRAME_SIZE] = {FLAG, A, C_UA, BCC_UA, FLAG};
+    char recv[FRAME_SIZE+1];
+    if(read_answer(fd,ua,recv) == 1) printf("\nUA answer received\n");
+    else printf("\nError receiving UA answer");
 
     if ( tcsetattr(fd,TCSANOW,&oldtio) == -1) {     //set attributes again
         perror("tcsetattr");
