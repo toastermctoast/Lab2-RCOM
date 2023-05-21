@@ -10,7 +10,7 @@
 #include <unistd.h>
 #include <signal.h>
 
-#define BAUDRATE B9600
+#define BAUDRATE B38400
 #define MODEMDEVICE "/dev/ttyS1"
 #define _POSIX_SOURCE 1 /* POSIX compliant source */
 #define FALSE 0
@@ -24,12 +24,15 @@
 #define BCC_SET (A^C_SET)
 
 #define FRAME_SIZE 5
-
 #define TIME_OUT 5
 
 int timed_out = 0, timer_on = 0;
 
-int send_command(int fd, unsigned int* command){
+volatile int STOP=FALSE;
+
+void flag_time_out(){ timed_out=1; printf("Timed out flag set\n");}
+
+int send_command(int fd, char* command){
 
     int res;
 
@@ -40,14 +43,12 @@ int send_command(int fd, unsigned int* command){
 
 }
 
-void flag_time_out(){ timed_out=1; }
+int read_answer(int fd, char* answer){
 
-int read_answer(int fd, unsigned int* answer, unsigned int* recv){
-
-    int FLAG_ANSWER = answer[0];
-    int A_ANSWER = answer[1];
-    int C_ANSWER = answer[2];
-    int BCC_ANSWER = answer[3];
+    char FLAG_ANSWER = answer[0];
+    char A_ANSWER = answer[1];
+    char C_ANSWER = answer[2];
+    char BCC_ANSWER = answer[3];
 
     //Estados
     typedef enum {
@@ -59,71 +60,72 @@ int read_answer(int fd, unsigned int* answer, unsigned int* recv){
         STOP
     } statesSET;
 
-    statesSET state;
-    int i;
-    
-    for(i=0; i<FRAME_SIZE;i++){
+    statesSET state = START;
+    int i = 0;
+    timed_out = 0;
+
+    char byte;
+
+    while(1){
 
         if (!timer_on) {
             alarm(TIME_OUT);  // ativa alarme de TIME_OUT segundos
+            printf("Alarm set\n");
             timer_on=1;
         }
+  
+        if (timed_out)  {
+            printf("Timed out\n");
+            timer_on = 0;
+            return -1;
+        }
 
-        if (timed_out) break;
-
-        read(fd,recv+i,1); //reads chars one by one
-
-        printf("BYTE LIDO %d\n", recv[i]);
+        printf("going to read\n");
+        read(fd,&byte,1); //reads chars one by one
+        printf("\nVOLTA : %d ---- Byte lido: %x\n", i,byte);
 
         switch(state){
 
 		    case START:
 		        printf("start\n");
-		        if(recv[i]==FLAG_ANSWER){
-			        state=FLAG_RCV;
-		        }
+		        if(byte==FLAG_ANSWER) state=FLAG_RCV;
 		        else state=START; 
 		    break;
 		   
             case FLAG_RCV:
 		        printf("flag_rcv\n");
-		        if(recv[i]==A_ANSWER) state = A_RCV;
-		        if (recv[i] == FLAG_ANSWER) state = FLAG_RCV;
-                else state = START;
+		        if(byte==A_ANSWER){ state = A_RCV; break;}
+		        if (byte == FLAG_ANSWER){ state = FLAG_RCV; break;}
+                state = START;
 		    break;
 
             case A_RCV:
 		        printf("a_rcv\n");
-                if(recv[i]==C_ANSWER) state = C_RCV;
-		        if(recv[i] == FLAG_ANSWER) state = FLAG_RCV;
-                else state = START;
+                if(byte == C_ANSWER){ state = C_RCV; break;}
+		        if(byte == FLAG_ANSWER){ state = FLAG_RCV; break;}
+                state = START;
 		    break;
 
             case C_RCV:
 		        printf("c_rcv\n");
-                if(recv[i]==BCC_ANSWER) state = BCC_OK;
-		        if(recv[i] == FLAG_ANSWER) state = FLAG_RCV;
-                else state = START;
+                if(byte == BCC_ANSWER){ state = BCC_OK; break;}
+		        if(byte == FLAG_ANSWER){ state = FLAG_RCV; break;}
+                state = START;
 		    break;
 
             case BCC_OK:
 		        printf("bcc_ok\n");
-                if(recv[i] == FLAG_ANSWER) state = STOP;
+                if(byte == FLAG_ANSWER) state = STOP;
                 else state = START;
 		    break;
-
-            case STOP:
-		        printf("stop\n");
-		    break;
-
 		   
-        }
-        if (state==STOP) break;
-    }
-    recv[i+1] = 0; //so we can printf
-    printf("COMMAND RECEIVED: %s\n",recv);
 
-    return 1;
+        }
+        if (state==STOP) return 1;
+        i++;
+    }
+
+    return -1;
 }
 
 int main(int argc, char** argv){
@@ -131,8 +133,7 @@ int main(int argc, char** argv){
     struct termios oldtio,newtio;
     int i, sum = 0, speed = 0;
 
-if(TRUE){
-    if ( (argc < 2) || ((strcmp("/dev/ttyS0", argv[1])!=0) &&  (strcmp("/dev/ttyS1", argv[1])!=0) )) {
+    if ( (argc < 2) || ((strcmp("/dev/ttyS10", argv[1])!=0) &&  (strcmp("/dev/ttyS11", argv[1])!=0) )) {
         printf("Usage:\tnserial SerialPort\n\tex: nserial /dev/ttyS1\n");
         exit(1);
     }
@@ -178,39 +179,28 @@ if(TRUE){
 
     printf("New termios structure set\n");
 
-
-}
-
-    /*-----------------------------------------------*/
-    /*-------------------TRABALHO--------------------*/
-    /*-----------------------------------------------*/
-
-
-
     //SEND SET COMMAND
-    unsigned int set[FRAME_SIZE] =  {FLAG, A, C_SET, BCC_SET, FLAG};
-    if (send_command(fd,set) != 1) printf("ERROR SENDING %s COMMAND\n",set);
+    char set[FRAME_SIZE] =  {FLAG, A, C_SET, BCC_SET, FLAG};
+    if (send_command(fd,set) != 1) printf("ERROR SENDING SET COMMAND\n");
+    else printf("SET COMMAND SENT\n");
 
     //RECEIVE UA ANSWER
-    unsigned int ua[FRAME_SIZE] = {FLAG, A, C_UA, BCC_UA, FLAG};
-    unsigned recv[FRAME_SIZE];
+    char ua[FRAME_SIZE] = {FLAG, A, C_UA, BCC_UA, FLAG};
 
-    (void) signal(SIGALRM, flag_time_out);  //flag_time_out é chamado quando acaba o tempo
-    
-    while(read_answer(fd,ua,recv) != 1){
+    (void) signal(SIGALRM, flag_time_out);
+
+    while(read_answer(fd,ua) != 1){
 
         if (timed_out){
-            send_command(fd,set);
             printf("Retransmitting command...\n");
+            send_command(fd,set);
         }
         else {
             printf("Unknown error reading answer\n");
             return -1;
         }
     }
-
-    printf("Correct answer received.\n");
-    
+    printf("\nUA answer received\n");
 
     if ( tcsetattr(fd,TCSANOW,&oldtio) == -1) {     //set attributes again
         perror("tcsetattr");
