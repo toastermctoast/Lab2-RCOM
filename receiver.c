@@ -29,112 +29,87 @@
 volatile int STOP=FALSE;
 int fd;
 
-typedef enum
-{
-    START,
-    FLAG_RCV,
-    A_RCV,
-    C_RCV,
-    BCC_OK,
-    STOP_A,
-} message_state;
+int read_command(int fd, char* recv){
 
-message_state state = START;
+    char FLAG_COMMAND = recv[0];
+    char A_COMMAND = recv[1];
+    char C_COMMAND = recv[2];
+    char BCC_COMMAND = recv[3];
 
-int state_handler()
-{
-    char buff[3],buf;
-    int res;
+    //Estados
+    typedef enum {
+        START,
+        FLAG_RCV,
+        A_RCV,
+        C_RCV,
+        BCC_OK,
+        STOP
+    } statesSET;
 
-    while (state != STOP_A) { 
-        res = read(fd, &buf, sizeof(buf));
-        printf("%x\n", buf);
-        if(res < 0 )
-            return 1; // erro
+    statesSET state = START;
+    int i = 0;
 
+    char byte;
 
-        switch (state)
-        {
+    while(1){
 
-            case START:
-                if (buf == FLAG){
-                    state = FLAG_RCV;
-                }
-                else
-                    state = START;
+        read(fd,&byte,1); //reads chars one by one
+        printf("\nVOLTA : %d ---- Byte lido: %x\n", i,byte);
 
-            break;
-                 
+        switch(state){
 
+		    case START:
+		        printf("start\n");
+		        if(byte==FLAG_COMMAND) state=FLAG_RCV;
+		        else state=START; 
+		    break;
+		   
             case FLAG_RCV:
-
-                if (buf == A)
-                {
-                    buff[0] = buf;
-                    state = A_RCV;
-                }
-            
-                else if (buf == FLAG)
-                    state = FLAG_RCV;
-            
-                
-                else
-                    state = START;        
-            break;
+		        printf("flag_rcv\n");
+		        if(byte==A_COMMAND){ state = A_RCV; break;}
+		        if (byte == FLAG_COMMAND){ state = FLAG_RCV; break;}
+                state = START;
+		    break;
 
             case A_RCV:
-                if (buf == C_SET)
-                {
-                    buff[1] = buf;
-                    state = C_RCV;
-                }
-                else if (buf == FLAG)
-                {
-                    state = FLAG_RCV;
-                }
-                else
-                {
-                    state = START;
-                }
-            break;
-            
+		        printf("a_rcv\n");
+                if(byte == C_COMMAND){ state = C_RCV; break;}
+		        if(byte == FLAG_COMMAND){ state = FLAG_RCV; break;}
+                state = START;
+		    break;
+
             case C_RCV:
-                if (buff[0] ^ buff[1])
-                {
-                    state = BCC_OK;
-
-                }
-                else if (FLAG)
-                {
-                    state = FLAG_RCV;
-
-                }
-                else
-                {
-                    state = START;
-
-                }
-            break;
+		        printf("c_rcv\n");
+                if(byte == BCC_COMMAND){ state = BCC_OK; break;}
+		        if(byte == FLAG_COMMAND){ state = FLAG_RCV; break;}
+                state = START;
+		    break;
 
             case BCC_OK:
-                if (buf == FLAG)
-                {
-                    state = STOP_A;
-                }
-                else
-                {
-                    state = START;
-                }
-                 break;
+		        printf("bcc_ok\n");
+                if(byte == FLAG_COMMAND) state = STOP;
+                else state = START;
+		    break;
+		   
 
-            case STOP_A:
-                break;               
-            
         }
+        if (state==STOP) return 1;
+        i++;
     }
-    return 0;
+
+    return -1;
 }
 
+int send_answer(int fd, char* command){
+
+    int res;
+
+    res = write(fd,command,FRAME_SIZE);            //returns number of written bytes in the driver file and saves in res
+    printf("%d BYTES SENT\n", res);
+
+    if (res == 5) return 1;
+
+}
 int main(int argc, char** argv)
 {
     int c, res, res_read;
@@ -173,18 +148,15 @@ int main(int argc, char** argv)
 
     printf("New termios structure set\n");
 
-        res_read = state_handler(); 
-        if(res == 0) 
-            printf("Leu corretamente\n");
-        else 
-            printf("ERRO\n");
-            
+    //RECEIVES SET COMMAND
+    char set[FRAME_SIZE] =  {FLAG, A, C_SET, BCC_SET, FLAG};
+    if (read_command(fd,set) != 1) printf ("Error reading command\n"); 
+    else printf("SET state achieved\n");
 
-        printf("SET state achieved\n");
-        char ua[FRAME_SIZE] = {FLAG, A, C_UA, BCC_UA, FLAG};
-        res = write(fd, ua, FRAME_SIZE);
-        printf("%d BYTES SENT\n", res);
-            
+    //SENDS UA ANSWER
+    char ua[FRAME_SIZE] = {FLAG, A, C_UA, BCC_UA, FLAG};
+    if (send_answer(fd,ua) != 1) printf("ERROR SENDING UA ANSWER\n");
+    else printf("UA ANSWER SENT\n");
 
     tcsetattr(fd,TCSANOW,&oldtio);
     close(fd);

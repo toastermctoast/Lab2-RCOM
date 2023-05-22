@@ -26,9 +26,23 @@
 #define FRAME_SIZE 5
 #define TIME_OUT 5
 
+int timer_on = 0, alarm_counter = 0;
+int fd;
+char set[FRAME_SIZE] =  {FLAG, A, C_SET, BCC_SET, FLAG};
+char ua[FRAME_SIZE] = {FLAG, A, C_UA, BCC_UA, FLAG};
 
 
-volatile int STOP=FALSE;
+void flag_time_out(){ 
+    timer_on = 0;
+    alarm_counter++;
+    if (alarm_counter > 3) {
+        printf("Timed out for the third time\n");
+        exit(1);
+    } 
+    printf("Alarm timed out\n Retransmitting...\n");
+    send_command(fd,set);
+}
+
 int send_command(int fd, char* command){
 
     int res;
@@ -40,7 +54,7 @@ int send_command(int fd, char* command){
 
 }
 
-int read_answer(int fd, char* answer, char* recv){
+int read_answer(int fd, char* answer){
 
     char FLAG_ANSWER = answer[0];
     char A_ANSWER = answer[1];
@@ -58,56 +72,69 @@ int read_answer(int fd, char* answer, char* recv){
     } statesSET;
 
     statesSET state = START;
-    int i;
+    int i = 0;
 
-    for(i=0; i<FRAME_SIZE;i++){
-        read(fd,recv+i,1); //reads chars one by one
-        //printf("\nBYTE LIDO: %x     ANSWER[i] : %x\n", recv[i],answer[i]);
+    char byte;
+
+    while(1){
+
+        if (!timer_on) {
+            alarm(TIME_OUT);  // ativa alarme de TIME_OUT segundos
+            printf("Alarm set\n");
+            timer_on=1;
+        }
+
+
+        read(fd,&byte,1); //reads chars one by one
+
+        //printf("\nVOLTA : %d ---- Byte lido: %x\n", i,byte);
 
         switch(state){
 
 		    case START:
 		        printf("start\n");
-		        if(recv[i]==FLAG_ANSWER) state=FLAG_RCV;
+		        if(byte==FLAG_ANSWER) state=FLAG_RCV;
 		        else state=START; 
 		    break;
 		   
             case FLAG_RCV:
 		        printf("flag_rcv\n");
-		        if(recv[i]==A_ANSWER){ state = A_RCV; break;}
-		        if (recv[i] == FLAG_ANSWER){ state = FLAG_RCV; break;}
+		        if(byte==A_ANSWER){ state = A_RCV; break;}
+		        if (byte == FLAG_ANSWER){ state = FLAG_RCV; break;}
                 state = START;
 		    break;
 
             case A_RCV:
 		        printf("a_rcv\n");
-                if(recv[i]==C_ANSWER){ state = C_RCV; break;}
-		        if(recv[i] == FLAG_ANSWER){ state = FLAG_RCV; break;}
+                if(byte == C_ANSWER){ state = C_RCV; break;}
+		        if(byte == FLAG_ANSWER){ state = FLAG_RCV; break;}
                 state = START;
 		    break;
 
             case C_RCV:
 		        printf("c_rcv\n");
-                if(recv[i]==BCC_ANSWER){ state = BCC_OK; break;}
-		        if(recv[i] == FLAG_ANSWER){ state = FLAG_RCV; break;}
+                if(byte == BCC_ANSWER){ state = BCC_OK; break;}
+		        if(byte == FLAG_ANSWER){ state = FLAG_RCV; break;}
                 state = START;
 		    break;
 
             case BCC_OK:
 		        printf("bcc_ok\n");
-                if(recv[i] == FLAG_ANSWER) state = STOP;
+                if(byte == FLAG_ANSWER) state = STOP;
                 else state = START;
 		    break;
 		   
+
         }
         if (state==STOP) return 1;
+        i++;
     }
 
     return -1;
 }
 
 int main(int argc, char** argv){
-    int fd,c;
+    int c;
     struct termios oldtio,newtio;
     int i, sum = 0, speed = 0;
 
@@ -157,15 +184,18 @@ int main(int argc, char** argv){
 
     printf("New termios structure set\n");
 
+    (void) signal(SIGALRM, flag_time_out);
+
     //SEND SET COMMAND
-    char set[FRAME_SIZE] =  {FLAG, A, C_SET, BCC_SET, FLAG};
-    if (send_command(fd,set) != 1) printf("ERROR SENDING %s COMMAND\n",set);
+    if (send_command(fd,set) != 1) printf("ERROR SENDING SET COMMAND\n");
+    else printf("SET COMMAND SENT\n");
 
     //RECEIVE UA ANSWER
-    char ua[FRAME_SIZE] = {FLAG, A, C_UA, BCC_UA, FLAG};
-    char recv[FRAME_SIZE+1];
-    if(read_answer(fd,ua,recv) == 1) printf("\nUA answer received\n");
-    else printf("\nError receiving UA answer");
+    if (read_answer(fd,ua) == 1) {
+        printf("UA answer received\n");
+        alarm(0);
+    }
+    else printf("ERRO ua\n");
 
     if ( tcsetattr(fd,TCSANOW,&oldtio) == -1) {     //set attributes again
         perror("tcsetattr");
